@@ -209,9 +209,9 @@ if model.probe.is_drifting(elara_tokens):
 | `fable_10b` | 4096 | 32 | 16 | 16 | 1024 | 32 | High quality, long-form |
 | `fable_50b` | 6144 | 48 | 32 | 24 | 2048 | 64 | Research-scale |
 | `fable_100b` | 8192 | 64 | 64 | 32 | 4096 | 128 | Frontier-scale |
-| `fable5` | 6144 | 48 | 32 | 32 | 2048 | 64 | Fable 5 behavioral alignment |
+| `fable5` | 16384 | 128 | 128 | 32 | 16384 | 256 | ~9.47T total / ~878B active — Fable 5 alignment |
 
-All presets use GQA (`n_kv_heads=8`), sparse MoE top-2 routing, ACT halting, and LoRA depth adapters.
+All presets use GQA (`n_kv_heads=8`), sparse MoE routing, ACT halting, and LoRA depth adapters.
 
 ---
 
@@ -225,11 +225,30 @@ OpenFable shares the same architectural intuition: that narrative reasoning -- l
 
 | Fable 5 observation | Source | OpenFable parameter |
 |---|---|---|
+| ~10T total / ~878B active params | Independent researcher analysis | `dim=16384`, `n_experts=128`, `n_experts_used=8` |
 | "Longer task = larger lead" | Anthropic launch | `n_loops=32`, `loop_scale_init=1.5` |
-| +3x memory amplification vs Opus 4.8 | Slay the Spire eval | `memory_dim=2048`, `memory_scale_init=2.0` |
-| 1/3 tokens of GPT-5.5, equiv. results | Benchmark analysis | `use_act=True`, `act_threshold=0.92` |
-| Stable across million-token contexts | Anthropic system card | `layer_scale_init=0.15`, `n_prelude=8` |
+| +3× memory amplification vs Opus 4.8 | Slay the Spire eval | `memory_dim=16384`, `memory_scale_init=2.0` |
+| ~1/3 the tokens of GPT-5.5, equiv. results | Benchmark analysis | `use_act=True`, `act_threshold=0.92` |
+| Stable across million-token contexts | Anthropic system card | `layer_scale_init=0.15`, `n_prelude=12` |
 | Name: *fabula* -- "that which is told" | Etymology | `default_narrative_mode="exposition"` |
+
+### Scale
+
+```python
+# Total parameters:    ~9.47 trillion
+# Active per pass:     ~878 billion (top-8 of 128 experts + 4 shared)
+# Sparsity ratio:      ~10.8×
+# Recurrence depth:    32 loops × 1 shared weight set
+# Unique weight layers: 25 (12 prelude + 1 recurrent + 12 coda)
+# Memory injection:    16384-dim (full model width, no bottleneck)
+
+from open_fable import OpenFable, fable5
+model = OpenFable(fable5())
+# ~9.47T parameter model — requires significant distributed infrastructure to train
+# Forward pass: ~878B active params (comparable to a ~1T dense model)
+```
+
+> **Infrastructure note:** This configuration requires multi-node GPU/TPU infrastructure to instantiate, let alone train. For research and experimentation, use `fable_3b()` or `fable_10b()`. `fable5()` is provided as an architectural reference and for distributed training at scale.
 
 ### Usage
 
@@ -237,7 +256,7 @@ OpenFable shares the same architectural intuition: that narrative reasoning -- l
 from open_fable import OpenFable, fable5
 
 model = OpenFable(fable5())
-# ~50B parameter class, Fable 5 behavioral alignment
+# ~9.47T parameter class, Fable 5 architectural alignment
 # default narrative mode: exposition (32 loops)
 ```
 

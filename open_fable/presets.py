@@ -198,57 +198,68 @@ def fable_100b() -> FableConfig:
 
 def fable5() -> FableConfig:
     """
-    Fable 5 alignment preset.
+    Fable 5 full-scale alignment preset.
 
-    Hyperparameters calibrated to match the behavioral signature of
-    Claude Fable 5 (Anthropic, June 2026) -- the first Mythos-class model
-    released for general use.
+    Dimensions calibrated to match the estimated architecture of Claude Fable 5
+    (Anthropic, June 2026) -- the first Mythos-class model released for general use.
 
-    Fable 5 observable behavioral fingerprint:
-    - Long-horizon coherence: performance scales with task complexity
-    - Strong memory amplification: +3x improvement vs prior Claude with persistent memory
-    - Efficient reasoning: ~1/3 the tokens of GPT-5.5 for equivalent results
-    - Narrative-native: named from Latin fabula -- "that which is told"
+    Architecture estimates (independent researcher analysis, not officially confirmed
+    by Anthropic):
+        Total parameters:   ~10 trillion (this config: 9.47T)
+        Active per pass:    ~800B-1.2T   (this config: ~878B, top-8 of 128 experts)
+        Sparsity ratio:     ~10x         (MoE dynamic routing)
+        Context:            1M tokens functional (4M with tiered attention)
 
-    These are architectural calibration parameters, not learned weights.
-    OpenFable is an independent implementation; Claude Fable 5 weights are
-    not distributed. This preset encodes behavioral alignment via:
-    - Recurrence depth tuned to exposition-class complexity
-    - Memory injection initialized to dominant-signal weight
-    - ACT threshold calibrated to Fable 5 keep-going-on-hard-tasks profile
-    - LoRA depth adapters scaled for late-loop amplification
+    Behavioral alignment weights:
+        memory_scale_init=2.0   -- encodes +3x memory amplification (Slay the Spire eval)
+        loop_scale_init=1.5     -- encodes "longer task = larger lead" scaling
+        act_threshold=0.92      -- high halt bar; keeps running on complex tasks
+        layer_scale_init=0.15   -- stability for million-token-class contexts
+
+    Note: Claude Fable 5's actual weights are proprietary to Anthropic and are NOT
+    distributed here. This preset encodes architectural alignment via initialization
+    and hyperparameter choices. The model must be trained from scratch to be useful.
+    OpenFable is not affiliated with Anthropic.
+
+    References:
+        Anthropic launch: https://www.anthropic.com/news/claude-fable-5-mythos-5
+        System card:      https://www-cdn.anthropic.com/d00db56fa754a1b115b6dd7cb2e3c342ee809620.pdf
+        Scale analysis:   https://www.aimagicx.com/blog/claude-mythos-5-trillion-parameter-model-developer-guide-2026
     """
     return FableConfig(
-        vocab_size=32_000,
-        dim=6144,
-        n_heads=48,
-        n_kv_heads=8,
-        n_prelude=8,
-        n_coda=8,
-        n_loops=32,
+        # Scale: ~9.47T total params, ~878B active per forward pass
+        vocab_size=131072,
+        dim=16384,
+        n_heads=128,
+        n_kv_heads=8,           # GQA: 128 query heads, 8 KV heads (16:1 ratio)
+        n_prelude=12,           # 12 unique-weight prelude layers
+        n_coda=12,              # 12 unique-weight coda layers
+        n_loops=32,             # 32 recurrence iterations (compute, not params)
         ff_mult=4.0,
-        n_experts=32,
-        n_experts_used=2,
-        n_shared_experts=2,
-        max_seq_len=32768,
+        # MoE: 128 experts total, top-8 active + 4 shared always-on
+        n_experts=128,
+        n_shared_experts=4,
+        n_experts_used=8,       # Active routed experts per token
+        max_seq_len=131072,     # 128K native; tiered attention extends to 1M+
         rope_theta=500_000.0,
         layer_scale_init=0.15,
         use_act=True,
         act_threshold=0.92,
         use_lora_adapters=True,
-        lora_rank=64,
+        lora_rank=256,
+        # FableMemory: full-scale narrative state
         memory=FableMemoryConfig(
-            memory_dim=2048,
-            max_characters=64,
-            max_locations=16,
-            char_embed_dim=512,
+            memory_dim=16384,       # Match model dim -- no bottleneck on memory injection
+            max_characters=256,
+            max_locations=64,
+            char_embed_dim=2048,
             update_every_n_tokens=512,
         ),
         narrative_mode="exposition",
-        probe_top_k=200,
-        probe_drift_threshold=0.2,
+        probe_top_k=500,
+        probe_drift_threshold=0.1,
         # Fable 5 behavioral alignment weights
-        memory_scale_init=2.0,    # Memory injection weighted 2x recurrence -- encodes +3x memory amplification
-        loop_scale_init=1.5,      # Late loops do more work -- encodes "longer task = larger lead"
-        default_narrative_mode="exposition",  # Default to deepest reasoning mode
+        memory_scale_init=2.0,
+        loop_scale_init=1.5,
+        default_narrative_mode="exposition",
     )

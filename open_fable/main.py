@@ -142,6 +142,26 @@ class FableConfig:
     loop_scale_init:        float = 1.0   # Init scale for LoRA depth adapter (encodes loop depth bias)
     default_narrative_mode: str   = ""    # If set, overrides narrative_mode for generate()
 
+    @property
+    def memory_dim(self) -> int:
+        return self.memory.memory_dim
+
+    @property
+    def max_characters(self) -> int:
+        return self.memory.max_characters
+
+    @property
+    def max_locations(self) -> int:
+        return self.memory.max_locations
+
+    @property
+    def char_embed_dim(self) -> int:
+        return self.memory.char_embed_dim
+
+    @property
+    def update_every_n_tokens(self) -> int:
+        return self.memory.update_every_n_tokens
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Primitives
