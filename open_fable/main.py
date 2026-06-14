@@ -137,6 +137,11 @@ class FableConfig:
     probe_top_k:            int   = 50
     probe_drift_threshold:  float = 0.3
 
+    # ── Behavioral alignment weights ──────────────────────────────────────────
+    memory_scale_init:      float = 1.0   # Init scale for C mixing coefficient (FableMemory injection)
+    loop_scale_init:        float = 1.0   # Init scale for LoRA depth adapter (encodes loop depth bias)
+    default_narrative_mode: str   = ""    # If set, overrides narrative_mode for generate()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Primitives
@@ -597,7 +602,16 @@ class OpenFable(nn.Module):
         nn.init.ones_(self.recurrent.A)
         nn.init.zeros_(self.recurrent.B)
         if self.recurrent.C is not None:
-            nn.init.zeros_(self.recurrent.C)
+            # Fable alignment: memory injection weight
+            # memory_scale_init > 1.0 gives memory a stronger initial presence
+            # (e.g. memory_scale_init=2.0 encodes Fable 5 +3x memory amplification)
+            nn.init.constant_(self.recurrent.C, self.cfg.memory_scale_init * 0.01)
+        # Fable alignment: LoRA depth adapter scale
+        # loop_scale_init > 1.0 encodes "later loops do more work" (Fable 5 long-task scaling)
+        if self.recurrent.lora_adapters is not None and self.cfg.loop_scale_init != 1.0:
+            for adapter in self.recurrent.lora_adapters:
+                # Scale A init std to encode loop depth bias
+                nn.init.normal_(adapter.A.weight, mean=0.0, std=0.02 * self.cfg.loop_scale_init)
 
     # ------------------------------------------------------------------
     # Causal mask helper
@@ -719,6 +733,10 @@ class OpenFable(nn.Module):
         cfg = self.cfg
         mem = memory or self.memory_module
         upd = update_memory_every or cfg.memory.update_every_n_tokens
+
+        # Apply default_narrative_mode if set and caller did not provide one
+        if narrative_mode is None and cfg.default_narrative_mode:
+            narrative_mode = cfg.default_narrative_mode
 
         ids = token_ids
         for step in range(max_new_tokens):

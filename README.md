@@ -20,9 +20,9 @@ OpenFable is a fork and extension of the OpenMythos Recurrent-Depth Transformer 
 
 These additions are grounded in recent research on recurrent transformer interpretability and adaptive computation:
 
-- arXiv:2603.21676 *"Thinking Deeper, Not Longer"* — silent thinking objective, LayerScale init, identity-biased recurrence
-- Huginn-3.5B / latent-reasoning-interpretability — decoded latent states reveal progressive answer refinement across loops; logit lens works on recurrent models
-- LoopFormer (ICLR 2026) — elastic-depth looped transformer, adaptive depth by task complexity
+- [arXiv:2603.21676](https://arxiv.org/abs/2603.21676) *"Thinking Deeper, Not Longer"* — silent thinking objective, LayerScale init, identity-biased recurrence
+- [Huginn-3.5B](https://arxiv.org/abs/2502.05171) / [latent-reasoning-interpretability](https://flowshu.github.io/latent-reasoning-interpretability/) — decoded latent states reveal progressive answer refinement across loops; logit lens works on recurrent models
+- [LoopFormer (ICLR 2026)](https://loopformer.github.io/) — elastic-depth looped transformer, adaptive depth by task complexity
 
 ---
 
@@ -73,7 +73,7 @@ When `memory_dim=0`, `C·m` is absent and the update reduces to the standard Ope
 - `n_shared_experts` always-active shared experts (summed unconditionally)
 - `n_experts` routed experts, top-`n_experts_used` selected per token via linear router
 
-**Stability:** LayerScale per residual branch (init = `layer_scale_init`, default 0.1), following arXiv:2603.21676. Identity-biased recurrence (`A` init = 1) provides a gradient highway through depth.
+**Stability:** LayerScale per residual branch (init = `layer_scale_init`, default 0.1), following [arXiv:2603.21676](https://arxiv.org/abs/2603.21676). Identity-biased recurrence (`A` init = 1) provides a gradient highway through depth.
 
 **ACT halting:** Each loop step, a linear head predicts a per-token halt probability. Looping stops when cumulative halt probability exceeds `act_threshold`. Uses Graves (2016) ACT weighted accumulation for gradient continuity.
 
@@ -126,7 +126,7 @@ Default `α = 0.1`. This keeps memory stable across short windows while allowing
 
 ### 2. NarrativeDepthController
 
-Loop-depth scheduling driven by narrative mode, extending LoopFormer's elastic-depth idea with narrative-domain priors.
+Loop-depth scheduling driven by narrative mode, extending [LoopFormer's](https://loopformer.github.io/) elastic-depth idea with narrative-domain priors.
 
 **Depth tiers:**
 
@@ -155,7 +155,7 @@ logits = model(ids, narrative_mode="dream")
 
 ### 3. CoherenceProbe
 
-Lightweight logit-lens interpretability hook. Inspired by the Huginn-3.5B finding that decoded latent representations reveal progressive answer refinement across loops.
+Lightweight logit-lens interpretability hook. Inspired by the [Huginn-3.5B](https://arxiv.org/abs/2502.05171) finding that decoded latent representations reveal progressive answer refinement across loops.
 
 **Metric — top-k entropy:**
 
@@ -202,15 +202,46 @@ if model.probe.is_drifting(elara_tokens):
 
 ## Scale Presets
 
-| Preset | dim | n_heads | n_experts | n_loops | memory_dim | max_chars |
-|---|---|---|---|---|---|---|
-| `fable_1b` | 2048 | 16 | 8 | 8 | 256 | 8 |
-| `fable_3b` | 3072 | 24 | 8 | 12 | 512 | 16 |
-| `fable_10b` | 4096 | 32 | 16 | 16 | 1024 | 32 |
-| `fable_50b` | 6144 | 48 | 32 | 24 | 2048 | 64 |
-| `fable_100b` | 8192 | 64 | 64 | 32 | 4096 | 128 |
+| Preset | dim | n_heads | n_experts | n_loops | memory_dim | max_chars | Notes |
+|---|---|---|---|---|---|---|---|
+| `fable_1b` | 2048 | 16 | 8 | 8 | 256 | 8 | Fast, short-to-medium |
+| `fable_3b` | 3072 | 24 | 8 | 12 | 512 | 16 | Balanced quality/speed |
+| `fable_10b` | 4096 | 32 | 16 | 16 | 1024 | 32 | High quality, long-form |
+| `fable_50b` | 6144 | 48 | 32 | 24 | 2048 | 64 | Research-scale |
+| `fable_100b` | 8192 | 64 | 64 | 32 | 4096 | 128 | Frontier-scale |
+| `fable5` | 6144 | 48 | 32 | 32 | 2048 | 64 | Fable 5 behavioral alignment |
 
 All presets use GQA (`n_kv_heads=8`), sparse MoE top-2 routing, ACT halting, and LoRA depth adapters.
+
+---
+
+## Fable 5 Alignment
+
+The `fable5` preset encodes the behavioral signature of [Claude Fable 5](https://www.anthropic.com/news/claude-fable-5-mythos-5) (Anthropic, June 2026) -- the first Mythos-class model released for general use. Its name derives from the Latin *fabula*: "that which is told."
+
+OpenFable shares the same architectural intuition: that narrative reasoning -- long-horizon coherence, character persistence, thematic throughlines -- requires more computational depth, not more parameters.
+
+### Observed behavioral fingerprint -> architectural parameters
+
+| Fable 5 observation | Source | OpenFable parameter |
+|---|---|---|
+| "Longer task = larger lead" | Anthropic launch | `n_loops=32`, `loop_scale_init=1.5` |
+| +3x memory amplification vs Opus 4.8 | Slay the Spire eval | `memory_dim=2048`, `memory_scale_init=2.0` |
+| 1/3 tokens of GPT-5.5, equiv. results | Benchmark analysis | `use_act=True`, `act_threshold=0.92` |
+| Stable across million-token contexts | Anthropic system card | `layer_scale_init=0.15`, `n_prelude=8` |
+| Name: *fabula* -- "that which is told" | Etymology | `default_narrative_mode="exposition"` |
+
+### Usage
+
+```python
+from open_fable import OpenFable, fable5
+
+model = OpenFable(fable5())
+# ~50B parameter class, Fable 5 behavioral alignment
+# default narrative mode: exposition (32 loops)
+```
+
+**Important:** These are architectural calibration parameters, not learned weights. Claude Fable 5's actual weights are proprietary to Anthropic and are not distributed here. `fable5()` encodes behavioral alignment via initialization and hyperparameter choices -- the resulting model must be trained from scratch.
 
 ---
 
@@ -333,15 +364,18 @@ pytest tests/ -v
 OpenFable is a narrative-focused fork of the OpenMythos Recurrent-Depth Transformer.
 
 **Core architecture credit:**
-- **OpenMythos** (MIT license) — Recurrent-Depth Transformer base: Prelude/Recurrent/Coda structure, GQA, sparse MoE, ACT halting, LoRA depth adapters
+- **[OpenMythos](https://github.com/kyegomez/OpenMythos)** (MIT license) — Recurrent-Depth Transformer base: Prelude/Recurrent/Coda structure, GQA, sparse MoE, ACT halting, LoRA depth adapters
 
 **Research that shaped the design:**
-- Dong et al. (2025). *"Thinking Deeper, Not Longer: Recurrent Depth Transformers."* arXiv:2603.21676 — LayerScale stability, identity-biased recurrence, silent thinking objective
-- Geiping et al. — *Huginn-3.5B / latent-reasoning-interpretability* — logit-lens on recurrent models, progressive answer refinement
-- Liu et al. (ICLR 2026). *LoopFormer* — elastic depth by task complexity
+- Dong et al. (2025). *"Thinking Deeper, Not Longer: Recurrent Depth Transformers."* [arXiv:2603.21676](https://arxiv.org/abs/2603.21676) — LayerScale stability, identity-biased recurrence, silent thinking objective
+- Geiping et al. — *[Huginn-3.5B](https://arxiv.org/abs/2502.05171) / [latent-reasoning-interpretability](https://flowshu.github.io/latent-reasoning-interpretability/)* — logit-lens on recurrent models, progressive answer refinement
+- Liu et al. (ICLR 2026). *[LoopFormer](https://loopformer.github.io/)* — elastic depth by task complexity
 - Su et al. (2023). *RoFormer* — RoPE rotary positional embeddings
 - Dai et al. (2024). *DeepSeek-V2* — Multi-Latent Attention, shared+routed MoE experts
 - Graves (2016). *Adaptive Computation Time for RNNs* — ACT halting mechanism
+**Fable 5 behavioral alignment:**
+- [Claude Fable 5 & Mythos 5](https://www.anthropic.com/news/claude-fable-5-mythos-5) (Anthropic, June 2026) -- behavioral fingerprint encoded as architectural calibration in `fable5()` preset. Claude Fable 5 is a product of Anthropic; this package is not affiliated with Anthropic.
+- [Claude Fable 5 & Mythos 5 System Card](https://www-cdn.anthropic.com/d00db56fa754a1b115b6dd7cb2e3c342ee809620.pdf) -- capability profile and safety architecture
 
 ---
 

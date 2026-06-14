@@ -39,7 +39,7 @@ from .main import OpenFable, FableConfig
 from .memory import FableMemory, FableMemoryConfig, CharacterState, WorldState
 from .depth import NarrativeDepthController, DepthTierConfig
 from .probe import CoherenceProbe
-from .presets import fable_1b, fable_3b, fable_10b, fable_50b, fable_100b
+from .presets import fable_1b, fable_3b, fable_10b, fable_50b, fable_100b, fable5
 
 __version__ = "0.1.0"
 __all__ = [
@@ -62,4 +62,5 @@ __all__ = [
     "fable_10b",
     "fable_50b",
     "fable_100b",
+    "fable5",
 ]
