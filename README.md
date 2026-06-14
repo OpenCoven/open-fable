@@ -378,6 +378,55 @@ pytest tests/ -v
 
 ---
 
+
+---
+
+## Training Data
+
+OpenFable ships two complementary training pipelines. See [`datasets/README.md`](datasets/README.md) for full documentation.
+
+### Stage 1 — MythosBridge
+
+Bridges [`WithinUsAI/claude_mythos_distilled_25k`](https://huggingface.co/datasets/WithinUsAI/claude_mythos_distilled_25k) into OpenFable format.
+
+25k synthetic examples across mathematical reasoning, advanced coding, cybersecurity, scientific analysis, agentic planning, and general expert QA — all re-annotated with `suggested_n_loops` and `narrative_mode` for RDT training.
+
+```bash
+python -m open_fable.data.mythos_bridge --output data/mythos_bridge.jsonl
+```
+
+### Stage 2 — FableForge
+
+Generates synthetic narrative training examples where harder tasks explicitly require more recurrence loops. **The first dataset designed around recurrence depth requirements.**
+
+```
+character_trace:      loops = f(n_characters, n_scenes)      — FableMemory active
+coherence_challenge:  loops = f(inconsistency_type)          — CoherenceProbe active
+narrative_completion: loops = f(n_characters, n_constraints) — both active
+```
+
+| Inconsistency type | Loops | Reasoning depth |
+|---|---|---|
+| Name drift | 4 | Surface pattern |
+| Location contradiction | 8 | Spatial reasoning |
+| Object continuity | 8 | State tracking |
+| Timeline error | 16 | Temporal ordering |
+| Relationship error | 16 | Social graph recall |
+| Trait reversal | 32 | Character psychology |
+
+```bash
+python -m open_fable.data.fable_forge --count 25000 --output data/fable_forge.jsonl
+python -m open_fable.data.fable_forge --stats --count 1000  # distribution preview
+```
+
+```python
+from open_fable.data import forge_dataset, bridge_dataset
+
+stage2 = forge_dataset(count=25000, seed=42)
+hard   = [e for e in stage2 if e["suggested_n_loops"] == 32]
+print(f"{len(hard):,} examples require maximum recurrence depth")
+```
+
 ## Credits and Lineage
 
 OpenFable is a narrative-focused fork of the OpenMythos Recurrent-Depth Transformer.
